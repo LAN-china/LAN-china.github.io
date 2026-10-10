@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>指针，看得见</title>
+<style>body{margin:0}*{box-sizing:border-box}</style>
+</head>
+<body>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+SC:wght@400;700;900&display=swap">
+<style>
+/* Layout: one 16:9 "video" player up top, then code + output, then a short note on how it was made. Single dark look, like an IDE at night. */
+:root{
+  color-scheme:dark;
+  --bg:#11132a; --stage:#181b3b; --panel:#21254c; --line:#323770;
+  --ink:#eceefa; --muted:#959ac4;
+  --amber:#f6b444; --cyan:#62d3e6; --red:#ff6170;
+  --sans:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,"Noto Sans SC",monospace;
+}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.75}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:16px;padding-block:28px 64px;display:flex;flex-direction:column;gap:26px}
+header{display:flex;flex-direction:column;gap:4px}
+h1{margin:0;font-size:clamp(26px,4vw,36px);font-weight:900;letter-spacing:.02em;text-wrap:balance}
+h1 em{font-style:normal;color:var(--amber);font-family:var(--mono);font-weight:700}
+.sub{margin:0;color:var(--muted)}
+h2{margin:0 0 10px;font-size:13px;font-weight:700;letter-spacing:.12em;color:var(--muted)}
+.player{background:var(--stage);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+canvas{display:block;width:100%;max-width:100%;aspect-ratio:16/9;cursor:pointer}
+.controls{display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--line)}
+.play{flex:none;width:40px;height:40px;border-radius:50%;border:0;background:var(--amber);color:#1a1530;font-size:16px;font-weight:900;cursor:pointer;display:grid;place-items:center}
+.play:focus-visible,.chapters button:focus-visible,input[type=range]:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+input[type=range]{flex:1;min-width:0;accent-color:var(--amber)}
+.time{flex:none;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px}
+.chapters{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 14px}
+.chapters button{font:inherit;font-size:13px;background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 12px;cursor:pointer}
+.chapters button.on{border-color:var(--amber);color:var(--amber)}
+.grid2{display:grid;grid-template-columns:1.25fr 1fr;gap:20px}
+.grid2>div{min-width:0}
+@media (max-width:760px){.grid2{grid-template-columns:1fr}}
+pre{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13.5px;line-height:1.65;color:var(--ink)}
+.k{color:var(--cyan)} .o{color:var(--amber)} .c{color:var(--muted)} .n{color:var(--amber)}
+.out{color:var(--ink)}
+.note{color:var(--muted);font-size:13px;margin:8px 0 0}
+.how{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;max-width:72ch}
+.how p{margin:0}
+.how p+p{margin-top:8px}
+.how code{font-family:var(--mono);color:var(--amber)}
+</style>
+
+<div class="wrap">
+  <header>
+    <a href="index.html" style="color:var(--muted);text-decoration:none;font-size:14px">← 返回 Lan 的主页</a>
+    <h1>指针，看得见 <em>&amp; *</em></h1>
+    <p class="sub">一段 84 秒的动画，从内存格子讲到空指针。点播放，或者点下面的章节跳着看。</p>
+  </header>
+
+  <section class="player">
+    <canvas id="stage" width="1280" height="720" aria-label="C++ 指针讲解动画"></canvas>
+    <div class="controls">
+      <button class="play" id="play" aria-label="播放">▶</button>
+      <input type="range" id="seek" min="0" max="84" step="0.01" value="0" aria-label="进度">
+      <span class="time" id="time">0:00 / 1:24</span>
+    </div>
+    <div class="chapters" id="chapters"></div>
+  </section>
+
+  <section class="grid2">
+    <div>
+      <h2>完整代码 main.cpp</h2>
+<pre><span class="c">#include &lt;iostream&gt;</span>
+<span class="k">using namespace</span> std;
+
+<span class="k">int</span> main() {
+    <span class="k">int</span> a = <span class="n">42</span>;
+    <span class="k">int</span><span class="o">*</span> p = <span class="o">&amp;</span>a;         <span class="c">// p 存的是 a 的地址</span>
+
+    cout &lt;&lt; <span class="o">&amp;</span>a &lt;&lt; endl;  <span class="c">// a 的地址</span>
+    cout &lt;&lt; p  &lt;&lt; endl;  <span class="c">// 和上一行一样</span>
+    cout &lt;&lt; <span class="o">*</span>p &lt;&lt; endl;  <span class="c">// 42</span>
+
+    <span class="o">*</span>p = <span class="n">100</span>;            <span class="c">// 通过 p 修改 a</span>
+    cout &lt;&lt; a  &lt;&lt; endl;  <span class="c">// 100</span>
+
+    <span class="k">int</span><span class="o">*</span> q = <span class="k">nullptr</span>;
+    <span class="k">if</span> (q != <span class="k">nullptr</span>) {  <span class="c">// 用之前先判空</span>
+        cout &lt;&lt; <span class="o">*</span>q &lt;&lt; endl;
+    }
+    <span class="k">return</span> <span class="n">0</span>;
+}</pre>
+    </div>
+    <div>
+      <h2>真实运行结果</h2>
+<pre class="out">0x7fff49acc984
+0x7fff49acc984
+42
+100</pre>
+      <p class="note">前两行一模一样，说明 p 里存的就是 a 的地址。真实地址又长又随机，每次运行都不同；动画里的 0x1008 是为了好看的简化版。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>这段动画是怎么做的</h2>
+    <div class="how">
+      <p>整段动画只有一个核心函数 <code>render(t)</code>：给它一个时间 t（秒），它就画出那一刻的画面。播放就是每一帧让 t 增加一点，拖进度条就是直接改 t。</p>
+      <p>网上那些 Opus 5.5 视频用的也是这个思路，区别是它们最后把每一帧导出成 MP4。你学完 C++ 基础后，可以试着自己写一个。</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+const T=84, W=1280, H=720;
+const css=getComputedStyle(document.documentElement);
+const v=k=>css.getPropertyValue(k).trim();
+const col={stage:v('--stage'),panel:v('--panel'),line:v('--line'),ink:v('--ink'),muted:v('--muted'),amber:v('--amber'),cyan:v('--cyan'),red:v('--red')};
+const SANS='"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif';
+const MONO='"JetBrains Mono","Noto Sans SC",Consolas,monospace';
+const cv=document.getElementById('stage'), ctx=cv.getContext('2d');
+const d=Math.min(window.devicePixelRatio||1,2); cv.width=W*d; cv.height=H*d; ctx.setTransform(d,0,0,d,0,0);
+
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
+const P=(t,s,dur)=>ease(clamp((t-s)/dur));
+const L=(t,s,dur)=>clamp((t-s)/dur);
+const win=(t,s,e,f=.5)=>Math.min(P(t,s,f),1-P(t,e-f,f));
+
+const scenes=[
+ {s:0,name:'片头'},{s:6,name:'内存与地址'},{s:16,name:'变量 a'},{s:26,name:'& 取地址'},
+ {s:34,name:'指针 p'},{s:46,name:'* 解引用'},{s:55,name:'通过指针修改'},{s:64,name:'空指针'},{s:74,name:'总结'}];
+
+const caps=[
+ [6.5,11,'内存可以想成一排格子，每个格子都有自己的门牌号，叫做「地址」。'],
+ [11,16,'一个 int 占 4 个字节，所以相邻 int 的地址每次加 4。（这里的地址是简化示意）'],
+ [16.5,21,'写下 int a = 42;  编译器给 a 分配一个格子，把 42 放进去。'],
+ [21,26,'一个变量有两样东西：它的「值」是 42，它的「地址」是 0x1008。'],
+ [26.5,34,'& 是取地址。&a 问的是“a 住在几号”，而不是“a 里放了什么”。'],
+ [34.5,40,'int* p = &a;  声明一个指针 p，把 a 的地址存进去。'],
+ [40,46,'指针本身也是变量，也有自己的格子。它存的是 a 的地址，所以说 p「指向」a。'],
+ [46.5,55,'* 是解引用。*p 的意思是：顺着 p 里的地址找过去，取出那里的值。'],
+ [55.5,64,'*p = 100;  找到 a 的格子，把 100 写进去。改的就是 a 本身。'],
+ [64.5,69,'nullptr 表示“不指向任何地方”，q 里没有有效的地址。'],
+ [69,74,'对空指针解引用，程序会直接崩溃。用指针之前，先判断 if (q != nullptr)。'],
+ [74.5,84,'记住这四句话，指针就入门了。']];
+
+const K=col.cyan, A=col.amber, I=col.ink, M=col.muted, R=col.red;
+const code=[
+ {t:16,seg:[['int ',K],['a',I],[' = ',M],['42',A],[';',M]]},
+ {t:26,seg:[['&',A],['a',I],[';',M],['     // 0x1008',M]]},
+ {t:34,seg:[['int',K],['* ',A],['p',I],[' = ',M],['&',A],['a',I],[';',M]]},
+ {t:46,seg:[['*',A],['p',I],[';',M],['     // 42',M]]},
+ {t:55,seg:[['*',A],['p',I],[' = ',M],['100',A],[';',M]]},
+ {t:64,seg:[['int',K],['* ',A],['q',I],[' = ',M],['nullptr',K],[';',M]]},
+ {t:69,seg:[['*',A],['q',I],[';',M],['     // 崩溃',R]]}];
+
+const ideas=[
+ [6.5,16,[['地址 = 格子的门牌号',I,34,900,SANS],['int 占 4 字节 → 地址每次 +4',M,20,400,SANS]]],
+ [16.5,26,[['a 的值',M,20,400,SANS],['42',A,52,700,MONO],['a 的地址',M,20,400,SANS],['0x1008',K,36,700,MONO]]],
+ [26.5,34,[['&a',A,60,700,MONO],['= 0x1008',K,40,700,MONO],['取地址：a 住在几号',I,24,700,SANS]]],
+ [34.5,46,[['p 的值',M,20,400,SANS],['0x1008',K,40,700,MONO],['正好是 a 的地址',I,24,700,SANS],['p 自己住在 0x1014',M,20,400,SANS]]],
+ [46.5,55,[['*p',A,60,700,MONO],['→ 42',A,44,700,MONO],['顺着地址，取出值',I,24,700,SANS]]],
+ [55.5,64,[['*p = 100',A,44,700,MONO],['⇒ a == 100',K,40,700,MONO],['改的就是 a 本身',I,24,700,SANS]]],
+ [64.5,74,[['q == nullptr',K,36,700,MONO],['*q → 段错误',R,36,900,SANS],['Segmentation fault',R,20,400,MONO]]]];
+
+function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);}
+function txt(s,x,y,size,color,o={}){
+  ctx.save();ctx.globalAlpha*=(o.alpha??1);ctx.fillStyle=color;
+  ctx.font=`${o.weight||400} ${size}px ${o.font||SANS}`;ctx.textAlign=o.align||'left';ctx.textBaseline='middle';
+  ctx.fillText(s,x,y);ctx.restore();
+}
+
+// memory row geometry
+const N=8,CW=128,GAP=12,X0=86,Y0=420,CH=92;
+const cx=i=>X0+i*(CW+GAP)+CW/2;
+const addr=i=>'0x'+(0x1000+i*4).toString(16).toUpperCase();
+const pA={x:cx(5),y:Y0-6}, pB={x:cx(2),y:Y0-6}, pC={x:(cx(5)+cx(2))/2,y:292};
+function bez(u){const m=1-u;return{x:m*m*pA.x+2*m*u*pC.x+u*u*pB.x,y:m*m*pA.y+2*m*u*pC.y+u*u*pB.y};}
+
+function drawIntro(t,a){
+  const rise=(1-P(t,0,1.2))*20;
+  txt('指针，看得见',W/2,300+rise,84,col.ink,{weight:900,align:'center',alpha:a*P(t,0,1)});
+  txt('80 秒看懂 C++ 指针',W/2,390+rise,28,col.muted,{align:'center',alpha:a*P(t,.6,1)});
+  txt('&      *      nullptr',W/2,452+rise,30,col.amber,{font:MONO,weight:700,align:'center',alpha:a*P(t,1.2,1)});
+}
+
+function drawHeader(t){
+  let ch=scenes[0];scenes.forEach(s=>{if(t>=s.s)ch=s;});
+  txt('C++ 指针',70,52,18,col.muted,{weight:700});
+  txt(ch.name,1210,52,18,col.amber,{weight:700,align:'right'});
+}
+
+function drawCode(t){
+  const x=70,y=88,w=560,h=242;
+  rr(x,y,w,h,12);ctx.fillStyle=col.panel;ctx.fill();ctx.strokeStyle=col.line;ctx.lineWidth=1;ctx.stroke();
+  txt('main.cpp',x+20,y+22,14,col.muted,{font:MONO});
+  let active=-1;code.forEach((l,i)=>{if(t>=l.t)active=i;});
+  code.forEach((l,i)=>{
+    if(t<l.t)return;
+    const ly=y+60+i*26;
+    if(i===active&&t<74){ctx.save();ctx.globalAlpha*=.16*P(t,l.t,.3);ctx.fillStyle=col.amber;ctx.fillRect(x+8,ly-12,w-16,24);ctx.restore();}
+    txt(String(i+1),x+26,ly,15,col.line,{font:MONO,align:'right'});
+    const full=l.seg.map(s=>s[0]).join('');let n=Math.floor(full.length*L(t,l.t,.7));
+    ctx.font=`400 19px ${MONO}`;let xx=x+44;
+    for(const [s,c] of l.seg){if(n<=0)break;const part=s.slice(0,n);n-=s.length;
+      txt(part,xx,ly,19,c,{font:MONO});ctx.font=`400 19px ${MONO}`;xx+=ctx.measureText(part).width;}
+  });
+}
+
+function drawIdea(t){
+  for(const [s,e,items] of ideas){
+    const a=win(t,s,e,.5);if(a<=0)continue;
+    let y=124;const dx=(1-P(t,s,.6))*16;
+    for(const [s2,c,size,weight,font] of items){
+      txt(s2,690+dx,y+size*.5,size,c,{weight,font,alpha:a});y+=size*1.38;
+    }
+  }
+}
+
+function glowStroke(on,color){
+  if(on<=0)return;ctx.save();ctx.globalAlpha*=on;ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.shadowColor=color;ctx.shadowBlur=18;ctx.stroke();ctx.restore();
+}
+
+function drawArrowHead(p,q,color){
+  const ang=Math.atan2(q.y-p.y,q.x-p.x);
+  ctx.save();ctx.fillStyle=color;ctx.translate(q.x,q.y);ctx.rotate(ang);
+  ctx.beginPath();ctx.moveTo(4,0);ctx.lineTo(-12,-8);ctx.lineTo(-12,8);ctx.closePath();ctx.fill();ctx.restore();
+}
+
+function drawMemory(t){
+  txt('内存 RAM',X0,Y0-24,15,col.muted,{weight:700,alpha:P(t,6,.6)});
+  const aGlow=Math.max(win(t,17,19.6),win(t,49.3,55),win(t,57.8,64));
+  const addrGlow=Math.max(win(t,26.5,34),win(t,38.4,46));
+  const pGlow=Math.max(win(t,36,40),win(t,47.4,48.4,.3),win(t,55.9,56.8,.3));
+  const qGlow=Math.max(win(t,65,68),win(t,69,71,.3));
+  for(let i=0;i<N;i++){
+    const a=P(t,6+i*.3,.45);if(a<=0)continue;
+    const x=X0+i*(CW+GAP),y=Y0+(1-a)*14;
+    ctx.save();ctx.globalAlpha*=a;
+    rr(x,y,CW,CH,10);ctx.fillStyle=col.panel;ctx.fill();ctx.strokeStyle=col.line;ctx.lineWidth=1.5;ctx.stroke();
+    if(i===2)glowStroke(aGlow,col.amber);
+    if(i===5)glowStroke(pGlow,col.cyan);
+    if(i===6)glowStroke(qGlow,t>69?col.red:col.cyan);
+    const mid=y+CH/2+8;
+    if(i===2&&t>=17){
+      txt('a',x+12,y+18,16,col.amber,{font:MONO,weight:700,alpha:P(t,17,.4)});
+      const f=P(t,58,.5);
+      if(f<1)txt('42',x+CW/2,mid,34,col.ink,{font:MONO,weight:700,align:'center',alpha:(1-f)*P(t,17,.4)});
+      if(f>0){ctx.save();ctx.translate(x+CW/2,mid);const sc=1+.35*(1-f);ctx.scale(sc,sc);txt('100',0,0,34,col.amber,{font:MONO,weight:700,align:'center',alpha:f});ctx.restore();}
+    }else if(i===5&&t>=36){
+      txt('p',x+12,y+18,16,col.cyan,{font:MONO,weight:700,alpha:P(t,36,.4)});
+      txt('0x1008',x+CW/2,mid,22,col.cyan,{font:MONO,weight:700,align:'center',alpha:P(t,36,.4)});
+    }else if(i===6&&t>=65){
+      txt('q',x+12,y+18,16,col.cyan,{font:MONO,weight:700,alpha:P(t,65,.4)});
+      txt('nullptr',x+CW/2,mid,20,col.cyan,{font:MONO,weight:700,align:'center',alpha:P(t,65,.4)});
+    }else{
+      txt('?',x+CW/2,mid,26,col.muted,{font:MONO,align:'center',alpha:.45});
+    }
+    const ag=i===2?addrGlow:0;
+    txt(addr(i),x+CW/2,y+CH+24,15,ag>0?col.amber:col.muted,{font:MONO,align:'center',weight:ag>.5?700:400});
+    ctx.restore();
+  }
+  // p -> a arrow
+  const pr=P(t,37,1.4);
+  if(pr>0){
+    ctx.save();ctx.strokeStyle=col.cyan;ctx.lineWidth=3;ctx.beginPath();
+    const steps=48;let prev=bez(0);ctx.moveTo(prev.x,prev.y);let last=prev;
+    for(let k=1;k<=steps*pr;k++){const q=bez(k/steps);ctx.lineTo(q.x,q.y);prev=last;last=q;}
+    ctx.stroke();ctx.restore();
+    if(pr>.95)drawArrowHead(bez(.96),bez(1),col.cyan);
+  }
+  // reading dot (*p) and writing dot (*p = 100)
+  for(const [s,label] of [[47.5,null],[56,'100']]){
+    const u=P(t,s,2);if(t<s||t>s+2.3)continue;
+    const p=bez(u),fade=1-P(t,s+2,.3);
+    ctx.save();ctx.globalAlpha*=fade;ctx.fillStyle=col.amber;ctx.shadowColor=col.amber;ctx.shadowBlur=20;
+    ctx.beginPath();ctx.arc(p.x,p.y,9,0,Math.PI*2);ctx.fill();ctx.restore();
+    if(label)txt(label,p.x+16,p.y-16,18,col.amber,{font:MONO,weight:700,alpha:fade});
+  }
+  // q -> nowhere
+  const qp=P(t,66,1);
+  if(qp>0){
+    const x=cx(6),y1=Y0-6,y2=362,ye=y1-(y1-y2)*qp;
+    ctx.save();ctx.strokeStyle=col.muted;ctx.lineWidth=2.5;ctx.setLineDash([7,7]);
+    ctx.beginPath();ctx.moveTo(x,y1);ctx.lineTo(x,ye);ctx.stroke();ctx.restore();
+    if(qp>.9)txt('∅  哪里都不指',x+16,350,17,col.muted,{weight:700,alpha:P(t,66.9,.4)});
+    if(t>=69&&t<70.8){const u=P(t,69,1.4);ctx.save();ctx.fillStyle=col.red;ctx.shadowColor=col.red;ctx.shadowBlur=20;
+      ctx.beginPath();ctx.arc(x,y1-(y1-y2)*u,9,0,Math.PI*2);ctx.fill();ctx.restore();}
+  }
+}
+
+function drawCaption(t){
+  for(const [s,e,c] of caps){
+    const a=win(t,s,e,.35);if(a<=0)continue;
+    ctx.save();ctx.font=`700 24px ${SANS}`;const w=Math.min(ctx.measureText(c).width+48,1220);
+    ctx.globalAlpha*=a*.92;rr(W/2-w/2,622,w,54,12);ctx.fillStyle='#0d0f22';ctx.fill();ctx.restore();
+    txt(c,W/2,649,24,col.ink,{weight:700,align:'center',alpha:a});
+  }
+}
+
+const tiles=[
+ ['int* p','指针 = 存地址的变量','它自己也有地址'],
+ ['&a','取地址','问 a 住在几号'],
+ ['*p','解引用','顺着地址读值、改值'],
+ ['nullptr','用之前先判空','空指针解引用会崩溃']];
+function drawSummary(t,a){
+  ctx.save();ctx.globalAlpha*=.94*a;ctx.fillStyle=col.stage;ctx.fillRect(-20,-20,W+40,H+40);ctx.restore();
+  txt('四句话记住指针',W/2,120,40,col.ink,{weight:900,align:'center',alpha:a});
+  tiles.forEach(([sym,head,sub],i)=>{
+    const b=P(t,74.8+i*.6,.5);if(b<=0)return;
+    const x=110+(i%2)*540,y=180+Math.floor(i/2)*176+(1-b)*14,w=520,h=150;
+    ctx.save();ctx.globalAlpha*=b;rr(x,y,w,h,14);ctx.fillStyle=col.panel;ctx.fill();ctx.strokeStyle=col.line;ctx.lineWidth=1.5;ctx.stroke();ctx.restore();
+    txt(sym,x+30,y+48,34,i===3?col.cyan:col.amber,{font:MONO,weight:700,alpha:b});
+    txt(head,x+30,y+96,24,col.ink,{weight:700,alpha:b});
+    txt(sub,x+30,y+126,17,col.muted,{alpha:b});
+  });
+}
+
+function render(t){
+  ctx.save();
+  ctx.fillStyle=col.stage;ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=col.line;for(let x=16;x<W;x+=32)for(let y=16;y<H;y+=32)ctx.fillRect(x,y,2,2);
+  const crash=t>=70.5?P(t,70.5,.08)*(1-P(t,70.6,1)):0;
+  if(crash>0)ctx.translate(Math.sin(t*90)*10*crash,Math.cos(t*70)*5*crash);
+  const intro=1-P(t,5,1);if(intro>0)drawIntro(t,intro);
+  const main=P(t,5.6,.8);
+  if(main>0){ctx.save();ctx.globalAlpha=main;drawHeader(t);drawCode(t);drawIdea(t);drawMemory(t);ctx.restore();}
+  if(crash>0){ctx.save();ctx.globalAlpha=.32*crash;ctx.fillStyle=col.red;ctx.fillRect(-20,-20,W+40,H+40);ctx.restore();
+    txt('Segmentation fault',W/2,560,40,col.red,{font:MONO,weight:700,align:'center',alpha:crash});}
+  const sum=P(t,74,1);if(sum>0)drawSummary(t,sum);
+  drawCaption(t);
+  ctx.restore();
+}
+
+// player
+let t=0,playing=false,last=performance.now();
+const btn=document.getElementById('play'),seek=document.getElementById('seek'),timeEl=document.getElementById('time'),chap=document.getElementById('chapters');
+const fmt=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
+const chBtns=scenes.map((s,i)=>{const b=document.createElement('button');b.type='button';b.id='ch'+i;b.textContent=s.name;
+  b.addEventListener('click',()=>{t=s.s+.01;setPlaying(true);});chap.appendChild(b);return b;});
+function setPlaying(p){if(p&&t>=T)t=0;playing=p;btn.textContent=p?'❚❚':'▶';btn.setAttribute('aria-label',p?'暂停':'播放');}
+btn.addEventListener('click',()=>setPlaying(!playing));
+cv.addEventListener('click',()=>setPlaying(!playing));
+seek.addEventListener('input',()=>{t=+seek.value;});
+document.addEventListener('keydown',e=>{if(e.code==='Space'&&!['INPUT','BUTTON'].includes(e.target.tagName)){e.preventDefault();setPlaying(!playing);}});
+function frame(now){
+  if(playing){t+=Math.min((now-last)/1000,.1);if(t>=T){t=T;setPlaying(false);}}
+  last=now;render(t);
+  seek.value=t;timeEl.textContent=fmt(t)+' / '+fmt(T);
+  let cur=0;scenes.forEach((s,i)=>{if(t>=s.s)cur=i;});chBtns.forEach((b,i)=>b.classList.toggle('on',i===cur));
+  requestAnimationFrame(frame);
+}
+render(0);
+const fontsReady=document.fonts?Promise.all([
+  document.fonts.load(`900 84px "Noto Sans SC"`,'指针看得见秒懂内存'),
+  document.fonts.load(`700 19px "JetBrains Mono"`,'int* p = &a;')]).catch(()=>{}):Promise.resolve();
+let started=false;const go=()=>{if(started)return;started=true;last=performance.now();requestAnimationFrame(frame);};
+fontsReady.then(go);setTimeout(go,1500);
+})();
+</script>
+
+</body>
+</html>
